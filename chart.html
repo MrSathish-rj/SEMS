@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHART _ Smart Energy Management System</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+ <!-- ========== SECTION 4: REAL-TIME CHARTS ========== -->
+    <section class="section-header">
+      <h2>📈 Real-Time Charts</h2>
+      <div class="chart-note">Live 20-point rolling window — data from Firebase Realtime DB</div>
+    </section>
+
+    <div class="charts-grid">
+      <div class="glass chart-card">
+        <div class="chart-header">
+          <span>Active Power (W)</span>
+          <span class="chart-live" id="chartPowerValue">-- W</span>
+        </div>
+        <canvas id="powerChart" height="120"></canvas>
+      </div>
+      <div class="glass chart-card">
+        <div class="chart-header">
+          <span>Voltage (V)</span>
+          <span class="chart-live" id="chartVoltageValue">-- V</span>
+        </div>
+        <canvas id="voltageChart" height="120"></canvas>
+      </div>
+      <div class="glass chart-card">
+        <div class="chart-header">
+          <span>Current (A)</span>
+          <span class="chart-live" id="chartCurrentValue">-- A</span>
+        </div>
+        <canvas id="currentChart" height="120"></canvas>
+      </div>
+      <div class="glass chart-card">
+        <div class="chart-header">
+          <span>Energy Cost (RM)</span>
+          <span class="chart-live" id="chartCostValue">-- RM</span>
+        </div>
+        <canvas id="costChart" height="120"></canvas>
+      </div>
+    </div>
+  <script src="app.js"></script>
+</body>
+</html>

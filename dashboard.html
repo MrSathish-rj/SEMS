@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEMS Dashboard — Smart Energy Management System</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+  <!-- Animated BG -->
+  <div class="bg-animation">
+    <div class="circle c1"></div>
+    <div class="circle c2"></div>
+    <div class="circle c3"></div>
+  </div>
+
+  <!-- ========== ALERT BANNERS (Tier 1 / 2 / 3) ========== -->
+  <div class="alert-banner tier1" id="alertTier1">
+    <span>ℹ️</span> <strong>TIER 1 — Normal:</strong> <span id="alertTier1Msg">System operating normally.</span>
+    <button onclick="dismissAlert('alertTier1')">✕</button>
+  </div>
+  <div class="alert-banner tier2" id="alertTier2">
+    <span>⚠️</span> <strong>TIER 2 — Warning:</strong> <span id="alertTier2Msg">Approaching threshold.</span>
+    <button onclick="dismissAlert('alertTier2')">✕</button>
+  </div>
+  <div class="alert-banner tier3" id="alertTier3">
+    <span>🚨</span> <strong>TIER 3 — Critical:</strong> <span id="alertTier3Msg">Overcurrent detected! Relay tripped.</span>
+    <button onclick="dismissAlert('alertTier3')">✕</button>
+  </div>
+
+  <!-- ========== TOP BAR ========== -->
+  <header class="topbar glass">
+    <div class="topbar-left">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+      </div>
+      <div class="title-section">
+        <h1>SEMS</h1>
+        <p class="greeting" id="greeting">Good Morning!</p>
+      </div>
+    </div>
+
+    <div class="topbar-center">
+      <div class="datetime">
+        <div class="time" id="time">--:--</div>
+        <div class="date" id="date">---</div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <!-- MQTT Status Indicator -->
+      <div class="mqtt-status" id="mqttStatusBadge" title="HiveMQ MQTT Connection">
+        <span class="status-dot offline" id="mqttDot"></span>
+        <span id="mqttStatusText">MQTT</span>
+      </div>
+      <div class="user-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+        <span id="userRole">Admin</span>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <!-- ========== MAIN LAYOUT ========== -->
+  <main class="dashboard-main">
+
+    <!-- ========== SECTION 1: LIVE METRICS ========== -->
+    <section class="section-header">
+      <h2>⚡ Live Energy Metrics — PZEM-004T via ESP32</h2>
+      <div class="device-status-row">
+        <div class="device-chip">
+          <span class="status-dot" id="esp32StatusDot"></span>
+          ESP32 &nbsp;<span id="esp32IP">---</span>
+        </div>
+        <div class="device-chip">
+          <span class="status-dot" id="pzemStatusDot"></span>
+          PZEM-004T &nbsp;<span id="pzemStatus">---</span>
+        </div>
+        <div class="device-chip">
+          <span class="status-dot" id="firebaseDot" style="background:#00ff9c"></span>
+          Firebase RT
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 Primary Metric Cards -->
+    <div class="metrics-grid">
+
+      <!-- Voltage -->
+      <div class="glass metric-card" id="voltageCard">
+        <div class="metric-icon voltage-icon">🔌</div>
+        <div class="metric-info">
+          <p class="metric-label">Voltage</p>
+          <p class="metric-value"><span id="voltage">0.0</span><span class="unit">V</span></p>
+          <div class="gauge-bar"><div class="gauge-fill voltage-fill" id="voltageGauge"></div></div>
+          <p class="metric-sub">Range: 80–260V AC</p>
+        </div>
+      </div>
+
+      <!-- Current -->
+      <div class="glass metric-card" id="currentCard">
+        <div class="metric-icon current-icon">⚡</div>
+        <div class="metric-info">
+          <p class="metric-label">Current</p>
+          <p class="metric-value"><span id="current">0.00</span><span class="unit">A</span></p>
+          <div class="gauge-bar"><div class="gauge-fill current-fill" id="currentGauge"></div></div>
+          <p class="metric-sub">Max: 100A (PZEM CT)</p>
+        </div>
+      </div>
+
+      <!-- Power -->
+      <div class="glass metric-card" id="powerCard">
+        <div class="metric-icon power-icon">💡</div>
+        <div class="metric-info">
+          <p class="metric-label">Active Power</p>
+          <p class="metric-value"><span id="power">0.0</span><span class="unit">W</span></p>
+          <div class="gauge-bar"><div class="gauge-fill power-fill" id="powerGauge"></div></div>
+          <p class="metric-sub">Instantaneous load</p>
+        </div>
+      </div>
+
+      <!-- Power Factor -->
+      <div class="glass metric-card" id="pfCard">
+        <div class="metric-icon pf-icon">📊</div>
+        <div class="metric-info">
+          <p class="metric-label">Power Factor</p>
+          <p class="metric-value"><span id="powerFactor">0.00</span></p>
+          <div class="gauge-bar"><div class="gauge-fill pf-fill" id="pfGauge"></div></div>
+          <p class="metric-sub">0 – 1.00 (ideal ≥ 0.9)</p>
+        </div>
+      </div>
+
+      <!-- Frequency -->
+      <div class="glass metric-card">
+        <div class="metric-icon freq-icon">📡</div>
+        <div class="metric-info">
+          <p class="metric-label">Frequency</p>
+          <p class="metric-value"><span id="frequency">0.0</span><span class="unit">Hz</span></p>
+          <div class="gauge-bar"><div class="gauge-fill freq-fill" id="freqGauge"></div></div>
+          <p class="metric-sub">Nominal: 50 Hz</p>
+        </div>
+      </div>
+
+      <!-- Energy Today -->
+      <div class="glass metric-card">
+        <div class="metric-icon energy-icon">🔋</div>
+        <div class="metric-info">
+          <p class="metric-label">Energy Today</p>
+          <p class="metric-value"><span id="energyToday">0.000</span><span class="unit">kWh</span></p>
+          <div class="gauge-bar"><div class="gauge-fill energy-fill" id="energyTodayGauge"></div></div>
+          <p class="metric-sub">Since midnight reset</p>
+        </div>
+      </div>
+
+      <!-- Energy Total -->
+      <div class="glass metric-card">
+        <div class="metric-icon etotal-icon">📦</div>
+        <div class="metric-info">
+          <p class="metric-label">Total Energy</p>
+          <p class="metric-value"><span id="energyTotal">0.000</span><span class="unit">kWh</span></p>
+          <div class="gauge-bar"><div class="gauge-fill etotal-fill" id="energyTotalGauge"></div></div>
+          <p class="metric-sub">Cumulative (PZEM register)</p>
+        </div>
+      </div>
+
+      <!-- Alert Tier Status -->
+      <div class="glass metric-card alert-status-card" id="alertStatusCard">
+        <div class="metric-icon alert-icon" id="alertIconBig">🟢</div>
+        <div class="metric-info">
+          <p class="metric-label">Alert Status</p>
+          <p class="metric-value alert-tier-text" id="alertTierDisplay">TIER 1</p>
+          <p class="metric-sub" id="alertTierSub">Normal — No action needed</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========== SECTION 2: RELAY CONTROL ========== -->
+    <section class="section-header">
+      <h2>🔁 Relay Control — Remote Load Switching</h2>
+    </section>
+
+    <div class="relay-grid">
+      <div class="glass relay-card">
+        <div class="relay-header">
+          <span class="relay-label">Relay 1 — Main Load</span>
+          <span class="relay-state" id="relay1State">OFF</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="relay1Toggle" onchange="setRelay(1, this.checked)">
+          <span class="slider"></span>
+        </label>
+        <p class="relay-note" id="relay1Note">Manually controlled</p>
+      </div>
+
+      <div class="glass relay-card">
+        <div class="relay-header">
+          <span class="relay-label">Auto Cut-off (Tier 3)</span>
+          <span class="relay-state" id="autoCutoffState">OFF</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="autoCutoffToggle" onchange="setAutoCutoff(this.checked)">
+          <span class="slider"></span>
+        </label>
+        <p class="relay-note">Auto-trips relay on critical overcurrent</p>
+      </div>
+
+      <div class="glass relay-card">
+        <div class="relay-header">
+          <span class="relay-label">MQTT Pub/Sub</span>
+          <span class="relay-state" id="mqttPubState">IDLE</span>
+        </div>
+        <button class="btn-primary" onclick="publishTestMQTT()">Publish Test Msg</button>
+        <p class="relay-note">Topic: sems/control/relay</p>
+      </div>
+
+      <div class="glass relay-card grafana-card">
+        <div class="relay-header">
+          <span class="relay-label">📈 Grafana Analytics</span>
+        </div>
+        <p class="relay-note">Live charts powered by Grafana + Firebase datasource</p>
+        <a class="btn-primary" href="#" id="grafanaLink" target="_blank" onclick="openGrafana()">Open Grafana →</a>
+        <p class="relay-note" style="margin-top:6px;opacity:0.6">Configure your Grafana URL in app.js</p>
+      </div>
+    </div>
+
+    <!-- ========== SECTION 3: BILLING / COST ========== -->
+    <section class="section-header">
+      <h2>💰 Billing & Cost Estimation</h2>
+    </section>
+
+    <div class="billing-grid">
+      <div class="glass billing-card">
+        <p class="billing-label">Today's Cost</p>
+        <p class="billing-value">RM <span id="costToday">0.00</span></p>
+        <p class="billing-sub">Based on <span id="unitRate">0.00</span> RM/kWh</p>
+      </div>
+      <div class="glass billing-card">
+        <p class="billing-label">This Month</p>
+        <p class="billing-value">RM <span id="costMonth">0.00</span></p>
+        <p class="billing-sub">Projected monthly usage</p>
+      </div>
+      <div class="glass billing-card">
+        <p class="billing-label">Total Accumulated</p>
+        <p class="billing-value">RM <span id="costTotal">0.00</span></p>
+        <p class="billing-sub">All-time cost estimate</p>
+      </div>
+      <div class="glass billing-card rate-card">
+        <p class="billing-label">Unit Rate (RM/kWh)</p>
+        <button class="btn-primary" onclick="chartDataSheet()">Save Rate</button>
+      </div>
+    </div>
+
+    <!-- ========== SECTION 4: REAL-TIME CHARTS ========== -->
+   <!-- ========== SECTION 4: REAL-TIME CHARTS ========== -->
+    <section class="section-header">
+      <h2>📈 Real-Time Charts</h2>
+      <div class="chart-note">Historical Live Data</div>
+    </section>
+<div class="glass billing-card rate-card">
+        <p class="billing-label">Historical Live Data</p>
+        <a class="btn-primary" href="chart.html" target="_blank">ENTER</a>
+      </div>
+    
+    <!-- ========== SECTION 5: ALERT LOG ========== -->
+    <section class="section-header">
+      <h2>🔔 Alert History Log</h2>
+      <button class="btn-secondary" onclick="clearAlertLog()">Clear Log</button>
+    </section>
+
+    <div class="glass alert-log-wrapper">
+      <div class="alert-log-header">
+        <span>Timestamp</span>
+        <span>Tier</span>
+        <span>Metric</span>
+        <span>Value</span>
+        <span>Message</span>
+      </div>
+      <div id="alertLogBody">
+        <div class="alert-log-empty">No alerts recorded yet.</div>
+      </div>
+    </div>
+
+    <!-- ========== SECTION 6: MQTT CONFIG ========== -->
+    <section class="section-header">
+      <h2>📡 MQTT / Firebase Configuration</h2>
+    </section>
+
+
+  </main><!-- end dashboard-main -->
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

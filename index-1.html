@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEMS — Smart Energy Management System</title>
+  <link rel="stylesheet" href="Style.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body class="login-page">
+
+  <!-- Animated Background -->
+  <div class="bg-animation">
+    <div class="circle c1"></div>
+    <div class="circle c2"></div>
+    <div class="circle c3"></div>
+  </div>
+
+  <!-- Floating Energy Icons -->
+  <div class="floating-icons">
+    <span class="fi fi1">⚡</span>
+    <span class="fi fi2">🔌</span>
+    <span class="fi fi3">📊</span>
+    <span class="fi fi4">💡</span>
+    <span class="fi fi5">🔋</span>
+  </div>
+
+  <div class="glass login-box">
+    <!-- Logo -->
+    <div class="login-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+      </svg>
+    </div>
+    <h2>SEMS</h2>
+    <p class="subtitle">Smart Energy Management System</p>
+    <p class="subtitle-small">Monitor · Control · Optimize</p>
+
+    <!-- Email -->
+    <div class="input-group">
+      <input type="email" id="email" placeholder=" " required autocomplete="email">
+      <label>Email</label>
+      <span class="input-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+          <polyline points="22,6 12,13 2,6"></polyline>
+        </svg>
+      </span>
+    </div>
+
+    <!-- Password -->
+    <div class="input-group">
+      <input type="password" id="password" placeholder=" " required autocomplete="current-password">
+      <label>Password</label>
+      <span class="input-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </span>
+    </div>
+
+    <button class="login-btn" onclick="login()">
+      <span>Login to Dashboard</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+        <polyline points="12 5 19 12 12 19"></polyline>
+      </svg>
+    </button>
+
+    <div class="loader" id="loader"></div>
+
+    <!-- Tech Stack badges -->
+    <div class="tech-badges">
+      <span class="badge">ESP32</span>
+      <span class="badge">PZEM-004T</span>
+      <span class="badge">Firebase</span>
+      <span class="badge">HiveMQ</span>
+      <span class="badge">Grafana</span>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
