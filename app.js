@@ -119,9 +119,10 @@ function logout() {
    AUTH GUARD — Dashboard only
    ============================================================ */
 auth.onAuthStateChanged(user => {
-  if (!location.pathname.includes('dashboard')) return;
-  if (!user) { location.href = 'index.html'; return; }
-
+  if (
+    !location.pathname.includes('dashboard') &&
+    !location.pathname.includes('chart')
+) return;
   const role = localStorage.getItem('semsUserRole') || 'viewer';
   setText('userRole', role === 'admin' ? 'Admin' : 'Viewer');
 
