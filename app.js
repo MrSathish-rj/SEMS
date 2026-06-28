@@ -85,7 +85,7 @@ function login() {
       db.ref(`sems/users/${cred.user.uid}/role`).once('value').then(snap => {
         localStorage.setItem('semsUserRole', snap.val() || 'viewer');
         showToast('Login successful!', 'success');
-        setTimeout(() => location.href = 'dashboard.html', 800);
+        setTimeout(() => location.href = 'chart.html', 800);
       });
     })
     .catch(err => {
