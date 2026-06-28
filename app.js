@@ -45,6 +45,7 @@ const GRAFANA_URL = "https://hugepike1982.grafana.net/d/rj4x7hc/sems"; // Update
 /* ── 5. Billing Rate ────────────────────────────────────── */
 let RATE_PER_KWH = 0.571; // RM per kWh (Malaysia TNB default)
 
+
 /* ── 6. Alert Thresholds ────────────────────────────────── */
 let thresholds = {
   warnCurrent:  8.0,
@@ -85,7 +86,7 @@ function login() {
       db.ref(`sems/users/${cred.user.uid}/role`).once('value').then(snap => {
         localStorage.setItem('semsUserRole', snap.val() || 'viewer');
         showToast('Login successful!', 'success');
-        setTimeout(() => location.href = 'dashboard.html', 800);
+        setTimeout(() => location.href = 'chart.html', 800);
       });
     })
     .catch(err => {
@@ -202,20 +203,23 @@ function startFirebaseListeners() {
     evaluateAlertTier(v, i, p, hz, pf, tier);
   });
 
-  /* ── Control state ── */
+  /* ── Control state (4 relays + auto_cutoff) ── */
   db.ref('sems/control').on('value', snap => {
     const d = snap.val();
     if (!d) return;
-    const r1 = document.getElementById('relay1Toggle');
-    if (r1) {
-      r1.checked = d.relay === true || d.relay === 1;
-      setText('relay1State', r1.checked ? 'ON' : 'OFF');
-      setText('relay1Note', r1.checked ? 'Load is ACTIVE' : 'Load is OFF');
+    for (let ch = 1; ch <= 4; ch++) {
+      const key = `relay${ch}`;
+      if (d[key] !== undefined) {
+        setRelayUI(ch, d[key] === true || d[key] === 1);
+      }
     }
     const ac = document.getElementById('autoCutoffToggle');
-    if (ac) {
-      ac.checked = d.auto_cutoff === true || d.auto_cutoff === 1;
-      setText('autoCutoffState', ac.checked ? 'ON' : 'OFF');
+    const acBadge = document.getElementById('autoCutoffState');
+    const acOn = d.auto_cutoff === true || d.auto_cutoff === 1;
+    if (ac) ac.checked = acOn;
+    if (acBadge) {
+      acBadge.textContent = acOn ? 'ON' : 'OFF';
+      acBadge.className   = 'relay-state ' + (acOn ? 'relay-on' : 'relay-off');
     }
   });
 
@@ -362,28 +366,60 @@ function clearAlertLog() {
 }
 
 /* ============================================================
-   RELAY CONTROL
+   RELAY CONTROL — 4-Channel
    ============================================================ */
-function setRelay(channel, state) {
-  // Write to Firebase (ESP32 polls this)
-  db.ref('sems/control/relay').set(state ? 1 : 0);
 
-  // Publish via MQTT
-  const msg = JSON.stringify({ relay: state ? 1 : 0, channel, ts: Date.now() });
+// Update DOM for a single relay channel (1-4)
+function setRelayUI(channel, state) {
+  const toggle = document.getElementById(`relay${channel}Toggle`);
+  if (toggle) toggle.checked = state;
+  const badge = document.getElementById(`relay${channel}State`);
+  if (badge) {
+    badge.textContent = state ? 'ON' : 'OFF';
+    badge.className   = 'relay-state ' + (state ? 'relay-on' : 'relay-off');
+  }
+  const note = document.getElementById(`relay${channel}Note`);
+  const gpios = { 1: 'GPIO 26', 2: 'GPIO 25', 3: 'GPIO 33', 4: 'GPIO 32' };
+  if (note) note.textContent = `${gpios[channel] || ''} — ${state ? 'Load is ACTIVE' : 'Manually controlled'}`;
+}
+
+// Set one relay channel and sync to Firebase + MQTT
+function setRelay(channel, state) {
+  // Write per-channel path that the firmware polls
+  db.ref(`sems/control/relay${channel}`).set(state);
+
+  // MQTT payload — only the changed key
+  const payload = { [`relay${channel}`]: state ? 1 : 0, ts: Date.now() };
   if (mqttClient && mqttClient.isConnected()) {
-    mqttClient.send(TOPIC_CONTROL, msg, 0, false);
+    mqttClient.send(TOPIC_CONTROL, JSON.stringify(payload), 0, false);
     setText('mqttPubState', 'SENT');
     setTimeout(() => setText('mqttPubState', 'IDLE'), 2000);
   }
 
-  showToast(`Relay ${channel} ${state ? 'ON' : 'OFF'}`, state ? 'success' : 'warn');
-  setText('relay1State', state ? 'ON' : 'OFF');
-  setText('relay1Note', state ? 'Load is ACTIVE' : 'Load is OFF');
+  setRelayUI(channel, state);
+  showToast(`Relay CH${channel} ${state ? 'ON' : 'OFF'}`, state ? 'success' : 'warn');
+}
+
+// Emergency: cut ALL 4 channels at once
+function cutAllRelays() {
+  for (let ch = 1; ch <= 4; ch++) {
+    db.ref(`sems/control/relay${ch}`).set(false);
+    setRelayUI(ch, false);
+  }
+  const payload = { relay1: 0, relay2: 0, relay3: 0, relay4: 0, ts: Date.now() };
+  if (mqttClient && mqttClient.isConnected()) {
+    mqttClient.send(TOPIC_CONTROL, JSON.stringify(payload), 0, false);
+  }
+  showToast('All 4 relays turned OFF', 'warn');
 }
 
 function setAutoCutoff(state) {
-  db.ref('sems/control/auto_cutoff').set(state ? 1 : 0);
-  setText('autoCutoffState', state ? 'ON' : 'OFF');
+  db.ref('sems/control/auto_cutoff').set(state);
+  const badge = document.getElementById('autoCutoffState');
+  if (badge) {
+    badge.textContent = state ? 'ON' : 'OFF';
+    badge.className   = 'relay-state ' + (state ? 'relay-on' : 'relay-off');
+  }
   showToast(`Auto cut-off ${state ? 'enabled' : 'disabled'}`, 'success');
 }
 
@@ -504,6 +540,12 @@ function handleMQTTSensorData(d) {
   if (d.p  !== undefined) addChartData('power',   d.p);
   if (d.v  !== undefined) addChartData('voltage', d.v);
   if (d.i  !== undefined) addChartData('current', d.i);
+
+  // Sync 4-channel relay states reported by ESP32 in sensor payload
+  for (let ch = 1; ch <= 4; ch++) {
+    const key = `relay${ch}`;
+    if (d[key] !== undefined) setRelayUI(ch, d[key] === true || d[key] === 1);
+  }
 }
 
 function handleMQTTAlert(d) {

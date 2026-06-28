@@ -318,7 +318,9 @@ body:not(.light-theme) .sun { display: none; }
 .relay-card { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .relay-header { display: flex; align-items: center; justify-content: space-between; }
 .relay-label  { font-size: 13px; font-weight: 600; }
-.relay-state  { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,0.07); }
+.relay-state  { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,0.07); transition: background 0.3s, color 0.3s; }
+.relay-state.relay-on  { background: rgba(0,255,156,0.15); color: var(--green); }
+.relay-state.relay-off { background: rgba(255,255,255,0.07); color: var(--text-sub); }
 .relay-note   { font-size: 11px; color: var(--text-sub); }
 
 /* Toggle Switch */
@@ -364,6 +366,14 @@ body:not(.light-theme) .sun { display: none; }
   transition: opacity 0.2s, transform 0.15s; text-decoration: none; display: inline-block;
 }
 .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+
+.btn-danger {
+  padding: 7px 16px; border-radius: 8px;
+  background: rgba(255,23,68,0.15); border: 1px solid rgba(255,23,68,0.35);
+  color: var(--red); font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.btn-danger:hover { background: rgba(255,23,68,0.28); transform: translateY(-1px); }
 
 .btn-secondary {
   padding: 7px 16px; border-radius: 8px;
