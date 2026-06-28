@@ -27,9 +27,9 @@ const firebaseConfig = {
    Get from: HiveMQ Cloud Console → Your Cluster → Details
    Uses WebSocket over TLS (port 8884) for browser connectivity
    ──────────────────────────────────────────────────────────── */
-const HIVEMQ_HOST     = "8612c31e6a2f45bea015b73e9478c6b5.s1.eu.hivemq.cloud";
+const HIVEMQ_HOST     = "d811b193ab1042a882914863f43318d3.s1.eu.hivemq.cloud";
 const HIVEMQ_PORT     = 8884;          // WebSocket TLS port
-const HIVEMQ_USER     = "Dratflix";
+const HIVEMQ_USER     = "dratflix";
 const HIVEMQ_PASS     = "Sathish2005";
 const HIVEMQ_CLIENT   = "SEMS-Dashboard-" + Math.random().toString(16).slice(2, 8);
 
@@ -44,7 +44,6 @@ const GRAFANA_URL = "https://hugepike1982.grafana.net/d/rj4x7hc/sems"; // Update
 
 /* ── 5. Billing Rate ────────────────────────────────────── */
 let RATE_PER_KWH = 0.571; // RM per kWh (Malaysia TNB default)
-
 
 /* ── 6. Alert Thresholds ────────────────────────────────── */
 let thresholds = {
@@ -86,7 +85,7 @@ function login() {
       db.ref(`sems/users/${cred.user.uid}/role`).once('value').then(snap => {
         localStorage.setItem('semsUserRole', snap.val() || 'viewer');
         showToast('Login successful!', 'success');
-        setTimeout(() => location.href = 'chart.html', 800);
+        setTimeout(() => location.href = 'dashboard.html', 800);
       });
     })
     .catch(err => {
@@ -476,18 +475,49 @@ function loadThresholds() {
 /* ============================================================
    HiveMQ MQTT (WebSocket over TLS)
    ============================================================ */
+let _mqttRetryCount = 0;
+const _mqttMaxRetry = 10;
+
 function connectMQTT() {
-  // Load the Paho MQTT library dynamically
-  const script = document.createElement('script');
-  script.src   = 'https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js';
-  script.onload = () => initPahoMQTT();
-  document.head.appendChild(script);
+  function loadScript(src, onLoad, onError) {
+    const s = document.createElement('script');
+    s.src = src; s.onload = onLoad; s.onerror = onError;
+    document.head.appendChild(s);
+  }
+  const primary   = 'https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js';
+  const secondary = 'https://cdn.jsdelivr.net/npm/paho-mqtt@1.1.0/paho-mqtt.js';
+  loadScript(primary,
+    () => initPahoMQTT(),
+    () => {
+      console.warn('Primary Paho CDN failed, trying fallback…');
+      loadScript(secondary, () => initPahoMQTT(), () => {
+        console.error('Both Paho CDNs failed. MQTT unavailable.');
+        setText('mqttStatusText', 'LIB ERR');
+      });
+    }
+  );
 }
 
 function initPahoMQTT() {
-  if (typeof Paho === 'undefined') { console.warn('Paho MQTT not loaded'); return; }
+  if (typeof Paho === 'undefined') {
+    console.warn('Paho MQTT not loaded');
+    setText('mqttStatusText', 'LIB ✗');
+    return;
+  }
 
-  mqttClient = new Paho.MQTT.Client(HIVEMQ_HOST, HIVEMQ_PORT, '/mqtt', HIVEMQ_CLIENT);
+  // Destroy stale client
+  if (mqttClient) {
+    try { mqttClient.disconnect(); } catch(e) {}
+    mqttClient = null;
+  }
+
+  // HiveMQ Cloud: WebSocket TLS on port 8884, path /mqtt
+  mqttClient = new Paho.MQTT.Client(
+    HIVEMQ_HOST,
+    Number(HIVEMQ_PORT),
+    '/mqtt',
+    HIVEMQ_CLIENT
+  );
 
   mqttClient.onConnectionLost = resp => {
     setDot('mqttDot', 'offline');
@@ -495,43 +525,68 @@ function initPahoMQTT() {
     setText('mqttPubState', 'DISCONNECTED');
     if (resp.errorCode !== 0) {
       console.warn('MQTT lost:', resp.errorMessage);
-      setTimeout(initPahoMQTT, 5000); // Reconnect
+      _mqttRetryCount++;
+      if (_mqttRetryCount <= _mqttMaxRetry) {
+        const delay = Math.min(3000 * _mqttRetryCount, 30000);
+        setText('mqttStatusText', 'retry ' + _mqttRetryCount + '…');
+        setTimeout(initPahoMQTT, delay);
+      } else {
+        setText('mqttStatusText', 'MQTT FAILED');
+        showToast('MQTT: max retries — check credentials in app.js', 'error');
+      }
     }
   };
 
   mqttClient.onMessageArrived = msg => {
     try {
       const data = JSON.parse(msg.payloadString);
-      if (msg.destinationName === TOPIC_SENSORS) {
-        handleMQTTSensorData(data);
-      } else if (msg.destinationName === TOPIC_ALERTS) {
-        handleMQTTAlert(data);
-      } else if (msg.destinationName === TOPIC_STATUS) {
-        handleMQTTStatus(data);
-      }
+      if (msg.destinationName === TOPIC_SENSORS)      handleMQTTSensorData(data);
+      else if (msg.destinationName === TOPIC_ALERTS)  handleMQTTAlert(data);
+      else if (msg.destinationName === TOPIC_STATUS)  handleMQTTStatus(data);
     } catch(e) { /* ignore malformed */ }
   };
 
   const opts = {
-    useSSL:   true,
-    userName: HIVEMQ_USER,
-    password: HIVEMQ_PASS,
+    useSSL:            true,
+    userName:          HIVEMQ_USER,
+    password:          HIVEMQ_PASS,
+    keepAliveInterval: 30,   // ping every 30 s — prevents broker timeout
+    cleanSession:      true,
+    timeout:           10,   // 10 s to establish connection
     onSuccess: () => {
+      _mqttRetryCount = 0;
       setDot('mqttDot', 'online');
       setText('mqttStatusText', 'MQTT ✓');
-      mqttClient.subscribe(TOPIC_SENSORS);
-      mqttClient.subscribe(TOPIC_ALERTS);
-      mqttClient.subscribe(TOPIC_STATUS);
-      showToast('HiveMQ MQTT connected', 'success');
+      showToast('HiveMQ MQTT connected ✓', 'success');
+      const subOpts = { qos: 0 };
+      mqttClient.subscribe(TOPIC_SENSORS, subOpts);
+      mqttClient.subscribe(TOPIC_ALERTS,  subOpts);
+      mqttClient.subscribe(TOPIC_STATUS,  subOpts);
     },
     onFailure: err => {
       setDot('mqttDot', 'offline');
-      setText('mqttStatusText', 'MQTT ✗');
-      console.warn('MQTT connect failed:', err.errorMessage);
-      setTimeout(initPahoMQTT, 8000); // Retry
+      console.warn('MQTT connect failed — code:', err.errorCode, '| msg:', err.errorMessage);
+
+      // Diagnose common failure reasons
+      let hint = err.errorMessage || 'unknown error';
+      if (err.errorCode === 4)                                              hint = 'Bad credentials';
+      else if (err.errorCode === 5)                                         hint = 'Not authorised';
+      else if (hint.includes('AMQJS0007E') || hint.includes('WebSocket'))   hint = 'WebSocket/TLS error — check host & port 8884';
+
+      _mqttRetryCount++;
+      if (_mqttRetryCount <= _mqttMaxRetry) {
+        const delay = Math.min(4000 * _mqttRetryCount, 30000);
+        setText('mqttStatusText', 'retry ' + _mqttRetryCount + '…');
+        console.log('MQTT retry', _mqttRetryCount, 'in', delay + 'ms —', hint);
+        setTimeout(initPahoMQTT, delay);
+      } else {
+        setText('mqttStatusText', 'MQTT FAILED');
+        showToast('MQTT failed: ' + hint, 'error');
+      }
     }
   };
 
+  setText('mqttStatusText', 'MQTT …');
   mqttClient.connect(opts);
 }
 
